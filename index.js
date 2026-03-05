@@ -18,34 +18,32 @@ app.listen(5000, () => console.log("Server running on port 5000"));
 app.post("/chat", async (req, res) => {
   const { message } = req.body;
 
-  const llamaPrompt = `<|system|>
-You are a helpful assistant. Always answer in English.
-</s>
-<|user|>
-${message}
-</s>
-<|assistant|>
-`;
+  if (!message || !message.trim()) {
+    return res.status(400).json({ error: "Message is required" });
+  }
 
   try {
-    const llamaResponse = await fetch("http://127.0.0.1:8081/completion", {
+    const ollamaResponse = await fetch("http://127.0.0.1:11434/api/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        prompt: llamaPrompt,
-        n_predict: 200
+        model: "llama3",
+        prompt: message,
+        stream: false
       })
     });
 
-    const data = await llamaResponse.json();
+    if (!ollamaResponse.ok) {
+      throw new Error(`Ollama responded with status ${ollamaResponse.status}`);
+    }
 
-    res.json({
-      reply: data.content   
-    });
+    const data = await ollamaResponse.json();
+
+    res.json({ reply: data.response });
 
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Llama server error" });
+    console.error("Ollama error:", err.message);
+    res.status(500).json({ error: "Ollama server error: " + err.message });
   }
 });
 

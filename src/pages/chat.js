@@ -13,6 +13,7 @@ export default function Chat() {
   );
   const [userInput, setUserInput] = useState("");
   const [messages, setMessages] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
   const [selectedBook, setSelectedBook] = useState("");
 
   const handleLogout = () => {
@@ -30,34 +31,35 @@ export default function Chat() {
     setNotes("");
   };
 
-  // ⭐ UPDATED FOR OLLAMA (port 5001 + question field)
   const sendMessage = async () => {
-    if (!userInput.trim()) return;
+    if (!userInput.trim() || isLoading) return;
 
-    // Add user message
-    setMessages((prev) => [
-      ...prev,
-      { role: "user", text: userInput },
-    ]);
-
-    // Call your backend (which calls Ollama)
-    const response = await fetch("http://localhost:5001/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-
-      // ⭐ Changed message → question
-      body: JSON.stringify({ question: userInput }),
-    });
-
-    const data = await response.json();
-
-    // Add assistant reply
-    setMessages((prev) => [
-      ...prev,
-      { role: "assistant", text: data.reply },
-    ]);
-
+    const currentInput = userInput;
     setUserInput("");
+    setMessages((prev) => [...prev, { role: "user", text: currentInput }]);
+    setIsLoading(true);
+
+    try {
+      const response = await fetch("http://localhost:5000/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: currentInput }),
+      });
+
+      const data = await response.json();
+
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", text: data.reply || data.error || "No response" },
+      ]);
+    } catch (err) {
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", text: "Error: Could not reach the server." },
+      ]);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -228,6 +230,39 @@ export default function Chat() {
           background: linear-gradient(135deg, #f472b6, #a855f7);
           color: white;
           cursor: pointer;
+          opacity: 1;
+          transition: opacity 0.2s;
+        }
+
+        .send-btn:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+        }
+
+        .typing-indicator {
+          display: flex;
+          align-items: center;
+          gap: 5px;
+          padding: 14px 20px;
+          background: #f3e8ff;
+          border-radius: 20px;
+          width: fit-content;
+        }
+
+        .dot {
+          width: 8px;
+          height: 8px;
+          background: #a855f7;
+          border-radius: 50%;
+          animation: bounce 1.2s infinite;
+        }
+
+        .dot:nth-child(2) { animation-delay: 0.2s; }
+        .dot:nth-child(3) { animation-delay: 0.4s; }
+
+        @keyframes bounce {
+          0%, 80%, 100% { transform: translateY(0); }
+          40% { transform: translateY(-8px); }
         }
       `}</style>
 
@@ -367,6 +402,15 @@ export default function Chat() {
                 </div>
               </div>
             ))}
+            {isLoading && (
+              <div className="msg-row">
+                <div className="typing-indicator">
+                  <div className="dot" />
+                  <div className="dot" />
+                  <div className="dot" />
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="input-area">
@@ -375,10 +419,11 @@ export default function Chat() {
               placeholder="Ask something from the textbook..."
               value={userInput}
               onChange={(e) => setUserInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && sendMessage()}
             />
 
-            <button className="send-btn" onClick={sendMessage}>
-              Send
+            <button className="send-btn" onClick={sendMessage} disabled={isLoading}>
+              {isLoading ? "..." : "Send"}
             </button>
           </div>
         </div>
